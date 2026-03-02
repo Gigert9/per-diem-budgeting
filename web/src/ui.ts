@@ -48,7 +48,7 @@ export function initApp(root: HTMLElement): void {
   const header = el('div', 'header')
   const logo = el('img', 'logo') as HTMLImageElement
   logo.alt = 'BudgetApp'
-  logo.src = '/icons/icon-192.png'
+  logo.src = `${import.meta.env.BASE_URL}icons/icon-192.png`
   header.appendChild(logo)
   const title = el('h1', 'title')
   title.textContent = 'Budget per day'
@@ -66,17 +66,36 @@ export function initApp(root: HTMLElement): void {
 
   window.addEventListener('budgetapp:canInstall', (e: any) => {
     const can = Boolean(e?.detail)
-    installBtn.disabled = !can
+    // Keep the button clickable even if the browser doesn't expose an install
+    // prompt (we show instructions in that case).
+    installBtn.dataset.canInstall = can ? '1' : '0'
   })
 
   const installHelpBackdrop = el('div', 'modalBackdrop')
   const installHelpModal = el('div', 'modal')
-  installHelpModal.innerHTML = `
-    <h2>Install on iPhone / iPad</h2>
-    <p>1) Tap the <strong>Share</strong> button in Safari.</p>
-    <p>2) Tap <strong>Add to Home Screen</strong>.</p>
-    <p>3) Confirm.</p>
-  `
+  const installHelpTitle = el('h2')
+  const installHelpBody = el('div')
+  installHelpModal.appendChild(installHelpTitle)
+  installHelpModal.appendChild(installHelpBody)
+
+  function setInstallHelp(platform: 'ios' | 'android'): void {
+    if (platform === 'ios') {
+      installHelpTitle.textContent = 'Install on iPhone / iPad'
+      installHelpBody.innerHTML = `
+        <p>1) Tap the <strong>Share</strong> button in Safari.</p>
+        <p>2) Tap <strong>Add to Home Screen</strong>.</p>
+        <p>3) Confirm.</p>
+      `
+      return
+    }
+
+    installHelpTitle.textContent = 'Install on Android'
+    installHelpBody.innerHTML = `
+      <p>If you don’t see an install prompt:</p>
+      <p>1) Open the browser menu (⋮)</p>
+      <p>2) Tap <strong>Install app</strong> or <strong>Add to Home screen</strong></p>
+    `
+  }
   const closeHelp = el('button') as HTMLButtonElement
   closeHelp.textContent = 'Close'
   closeHelp.addEventListener('click', () => {
@@ -86,7 +105,9 @@ export function initApp(root: HTMLElement): void {
   installHelpBackdrop.appendChild(installHelpModal)
   container.appendChild(installHelpBackdrop)
 
-  window.addEventListener('budgetapp:showInstallHelp', () => {
+  window.addEventListener('budgetapp:showInstallHelp', (e: any) => {
+    const platform = e?.detail?.platform === 'android' ? 'android' : 'ios'
+    setInstallHelp(platform)
     installHelpBackdrop.style.display = 'flex'
   })
   installHelpBackdrop.addEventListener('click', (ev) => {

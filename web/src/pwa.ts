@@ -66,11 +66,16 @@ export function wireInstallAndUpdates(): void {
     if (isInStandaloneMode()) return
 
     if (isIos()) {
-      window.dispatchEvent(new CustomEvent('budgetapp:showInstallHelp', { detail: true }))
+      window.dispatchEvent(new CustomEvent('budgetapp:showInstallHelp', { detail: { platform: 'ios' } }))
       return
     }
 
-    if (!deferredPrompt) return
+    if (!deferredPrompt) {
+      // Fallback (Android): the browser didn't offer an install prompt.
+      // Show simple instructions instead of doing nothing.
+      window.dispatchEvent(new CustomEvent('budgetapp:showInstallHelp', { detail: { platform: 'android' } }))
+      return
+    }
     deferredPrompt.prompt()
     try {
       await deferredPrompt.userChoice

@@ -1,7 +1,12 @@
 import type { BudgetState, Expense } from './types'
 
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
+  // Use local date (not UTC) to match Python's date.today() and user expectations.
+  const d = new Date()
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 export function monthKeyFromIso(isoDate: string): string {

@@ -99,4 +99,4 @@ Settings are stored locally in a JSON file:
 - Windows: `%APPDATA%\BudgetApp\budgetapp.json`
 - Fallback: `~/.config/BudgetApp/budgetapp.json`
 
-The file is created automatically on first run.
+The file is created automatically on first run
