@@ -217,6 +217,14 @@ export function initApp(root: HTMLElement): void {
 
   const list = el('ul', 'list')
   expenseCard.appendChild(list)
+
+  let selectedExpenseStateIndex: number | null = null
+
+  const deleteExpenseBtn = el('button') as HTMLButtonElement
+  deleteExpenseBtn.textContent = 'Delete selected'
+  deleteExpenseBtn.disabled = true
+  deleteExpenseBtn.style.marginTop = '10px'
+  expenseCard.appendChild(deleteExpenseBtn)
   container.appendChild(expenseCard)
 
   const status = el('div', 'status')
@@ -237,14 +245,42 @@ export function initApp(root: HTMLElement): void {
     metrics.appendChild(item)
   }
 
-  function renderTodayList(expenses: Expense[]): void {
+  function updateDeleteExpenseUi(nowIso: string): void {
+    if (selectedExpenseStateIndex === null) {
+      deleteExpenseBtn.disabled = true
+      return
+    }
+    const exp = state.expenses[selectedExpenseStateIndex]
+    deleteExpenseBtn.disabled = !(exp && exp.date === nowIso)
+  }
+
+  function renderTodayList(nowIso: string): void {
     list.innerHTML = ''
-    for (const e of expenses) {
+    const todayItems: Array<{ exp: Expense, stateIndex: number }> = []
+    for (let i = 0; i < state.expenses.length; i++) {
+      const exp = state.expenses[i]
+      if (exp.date === nowIso) todayItems.push({ exp, stateIndex: i })
+    }
+
+    for (const item of todayItems) {
+      const e = item.exp
       const li = el('li')
       const note = e.note ? ` — ${e.note}` : ''
       li.textContent = `${formatMoney(e.amount)}${note}`
+      if (selectedExpenseStateIndex === item.stateIndex) li.classList.add('selected')
+      li.addEventListener('click', () => {
+        selectedExpenseStateIndex = item.stateIndex
+        renderTodayList(nowIso)
+      })
       list.appendChild(li)
     }
+
+    // If the previously selected item is no longer in today's list, clear it.
+    if (selectedExpenseStateIndex !== null) {
+      const selected = state.expenses[selectedExpenseStateIndex]
+      if (!selected || selected.date !== nowIso) selectedExpenseStateIndex = null
+    }
+    updateDeleteExpenseUi(nowIso)
   }
 
   function recomputeAndRender(opts: { save: boolean }): void {
@@ -253,6 +289,8 @@ export function initApp(root: HTMLElement): void {
       setStatus('Enter a valid number (example: 1000 or 1000.00).')
       metrics.innerHTML = ''
       list.innerHTML = ''
+      selectedExpenseStateIndex = null
+      updateDeleteExpenseUi(todayIso())
       return
     }
 
@@ -275,7 +313,7 @@ export function initApp(root: HTMLElement): void {
     upsertMetric('Remaining this month', formatMoney(monthRemaining))
     upsertMetric('Amount saved last month', formatMoney(state.last_month_saved ?? 0))
 
-    renderTodayList(expensesForDate(state.expenses, now))
+    renderTodayList(now)
 
     state.base_amount = base
     if (!state.monthly_bases) state.monthly_bases = {}
@@ -308,10 +346,32 @@ export function initApp(root: HTMLElement): void {
     const exp: Expense = { date: todayIso(), amount, note: note || undefined }
     state.expenses.push(exp)
     saveState(state)
+    selectedExpenseStateIndex = null
     amountInput.value = ''
     noteInput.value = ''
     recomputeAndRender({ save: false })
   }
+
+  deleteExpenseBtn.addEventListener('click', () => {
+    const nowIso = todayIso()
+    if (selectedExpenseStateIndex === null) {
+      setStatus('Select an expense to delete.')
+      return
+    }
+    const exp = state.expenses[selectedExpenseStateIndex]
+    if (!exp || exp.date !== nowIso) {
+      selectedExpenseStateIndex = null
+      renderTodayList(nowIso)
+      setStatus('Select an expense from today to delete.')
+      return
+    }
+
+    state.expenses.splice(selectedExpenseStateIndex, 1)
+    saveState(state)
+    selectedExpenseStateIndex = null
+    recomputeAndRender({ save: false })
+    if (!status.textContent) setStatus('Deleted.')
+  })
 
   addExpenseBtn.addEventListener('click', addExpense)
   amountInput.addEventListener('keydown', (e) => {

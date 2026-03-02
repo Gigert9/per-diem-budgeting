@@ -44,6 +44,9 @@ class BudgetApp(ttk.Frame):
         self.expense_note_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="")
 
+        self._today_expense_indices: list[int] = []
+        self.delete_expense_btn: ttk.Button | None = None
+
         self._build_ui()
         self._recompute_and_render(save=False)
 
@@ -147,10 +150,15 @@ class BudgetApp(ttk.Frame):
 
         self.expenses_list = tk.Listbox(self, height=6)
         self.expenses_list.grid(row=18, column=0, columnspan=2, sticky="nsew")
+        self.expenses_list.bind("<<ListboxSelect>>", lambda _e: self._update_delete_button_state())
         self.rowconfigure(18, weight=1)
 
+        self.delete_expense_btn = ttk.Button(self, text="Delete selected", command=self._on_delete_expense)
+        self.delete_expense_btn.grid(row=19, column=1, sticky="e", pady=(8, 0))
+        self._update_delete_button_state()
+
         status = ttk.Label(self, textvariable=self.status_var)
-        status.grid(row=19, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        status.grid(row=20, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
 
@@ -176,10 +184,29 @@ class BudgetApp(ttk.Frame):
 
     def _render_today_expenses(self, today: date) -> None:
         self.expenses_list.delete(0, tk.END)
-        today_items = expenses_for_date(self.state.expenses, today)
-        for exp in today_items:
+
+        self._today_expense_indices.clear()
+        today_iso = today.isoformat()
+        for idx, exp in enumerate(self.state.expenses):
+            if exp.date != today_iso:
+                continue
             note = f" — {exp.note}" if exp.note else ""
             self.expenses_list.insert(tk.END, f"{self._format_money(exp.amount)}{note}")
+            self._today_expense_indices.append(idx)
+
+        self._update_delete_button_state()
+
+    def _update_delete_button_state(self) -> None:
+        if not self.delete_expense_btn:
+            return
+        sel = self.expenses_list.curselection()
+        if not sel:
+            self.delete_expense_btn.state(["disabled"])
+            return
+        if not self._today_expense_indices:
+            self.delete_expense_btn.state(["disabled"])
+            return
+        self.delete_expense_btn.state(["!disabled"])
 
     def _recompute_and_render(self, *, save: bool) -> None:
         base = self._parse_money(self.base_var.get())
@@ -244,6 +271,29 @@ class BudgetApp(ttk.Frame):
         self.expense_note_var.set("")
 
         self._recompute_and_render(save=False)
+
+    def _on_delete_expense(self) -> None:
+        sel = self.expenses_list.curselection()
+        if not sel:
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        list_idx = int(sel[0])
+        if list_idx < 0 or list_idx >= len(self._today_expense_indices):
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        state_idx = self._today_expense_indices[list_idx]
+        if state_idx < 0 or state_idx >= len(self.state.expenses):
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        self.state.expenses.pop(state_idx)
+        save_state(self.state)
+        self.expenses_list.selection_clear(0, tk.END)
+        self._recompute_and_render(save=False)
+        if not self.status_var.get():
+            self.status_var.set("Deleted.")
 
 
 def main() -> int:

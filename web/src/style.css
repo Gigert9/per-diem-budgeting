@@ -124,6 +124,11 @@ button:disabled {
 .list li {
   padding: 10px 0;
   border-bottom: 1px solid #eee;
+  cursor: pointer;
+}
+
+.list li.selected {
+  background: #f8f8f8;
 }
 
 .actions {
