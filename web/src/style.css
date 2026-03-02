@@ -93,6 +93,27 @@ button:disabled {
   gap: 10px;
 }
 
+.metricsRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.metricsSection {
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.metricsSection:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.metricsSectionTitle {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
 @media (max-width: 560px) {
   .metrics {
     grid-template-columns: 1fr;
@@ -103,6 +124,16 @@ button:disabled {
   display: flex;
   justify-content: space-between;
   gap: 12px;
+}
+
+.metric.full {
+  grid-column: 1 / -1;
+}
+
+.metric.important .value {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .metric .value {

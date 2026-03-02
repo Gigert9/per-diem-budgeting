@@ -52,7 +52,7 @@ class BudgetApp(ttk.Frame):
 
     def _build_ui(self) -> None:
         self.master.title("BudgetApp")
-        self.master.minsize(460, 420)
+        self.master.minsize(460, 520)
 
         menubar = tk.Menu(self.master)
         file_menu = tk.Menu(menubar, tearoff=0)
@@ -86,79 +86,91 @@ class BudgetApp(ttk.Frame):
         sep = ttk.Separator(self)
         sep.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 8))
 
+        daily_title = ttk.Label(self, text="Daily", font=("Segoe UI", 10, "bold"))
+        daily_title.grid(row=4, column=0, columnspan=2, sticky="w")
+
         days_label = ttk.Label(self, text="Remaining days (incl. today)")
-        days_label.grid(row=4, column=0, sticky="w")
+        days_label.grid(row=5, column=0, sticky="w", pady=(6, 0))
         days_value = ttk.Label(self, textvariable=self.remaining_days_var)
-        days_value.grid(row=4, column=1, sticky="w")
+        days_value.grid(row=5, column=1, sticky="w", pady=(6, 0))
 
         per_day_label = ttk.Label(self, text="You can spend per day")
-        per_day_label.grid(row=5, column=0, sticky="w", pady=(6, 0))
+        per_day_label.grid(row=6, column=0, sticky="w", pady=(4, 0))
         per_day_value = ttk.Label(self, textvariable=self.per_day_var, font=("Segoe UI", 11, "bold"))
-        per_day_value.grid(row=5, column=1, sticky="w", pady=(6, 0))
-
-        spend_sep = ttk.Separator(self)
-        spend_sep.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(10, 8))
+        per_day_value.grid(row=6, column=1, sticky="w", pady=(4, 0))
 
         spent_today_label = ttk.Label(self, text="Spent today")
-        spent_today_label.grid(row=7, column=0, sticky="w")
+        spent_today_label.grid(row=7, column=0, sticky="w", pady=(4, 0))
         spent_today_value = ttk.Label(self, textvariable=self.spent_today_var)
-        spent_today_value.grid(row=7, column=1, sticky="w")
+        spent_today_value.grid(row=7, column=1, sticky="w", pady=(4, 0))
 
         remaining_today_label = ttk.Label(self, text="Remaining today")
-        remaining_today_label.grid(row=8, column=0, sticky="w", pady=(4, 0))
-        remaining_today_value = ttk.Label(self, textvariable=self.remaining_today_var)
-        remaining_today_value.grid(row=8, column=1, sticky="w", pady=(4, 0))
+        remaining_today_label.grid(row=8, column=0, sticky="w", pady=(6, 0))
+        remaining_today_value = ttk.Label(self, textvariable=self.remaining_today_var, font=("Segoe UI", 14, "bold"))
+        remaining_today_value.grid(row=8, column=1, sticky="w", pady=(6, 0))
+
+        daily_sep = ttk.Separator(self)
+        daily_sep.grid(row=9, column=0, columnspan=2, sticky="ew", pady=(10, 8))
+
+        month_title = ttk.Label(self, text="This month", font=("Segoe UI", 10, "bold"))
+        month_title.grid(row=10, column=0, columnspan=2, sticky="w")
 
         spent_month_label = ttk.Label(self, text="Spent this month")
-        spent_month_label.grid(row=9, column=0, sticky="w", pady=(4, 0))
+        spent_month_label.grid(row=11, column=0, sticky="w", pady=(6, 0))
         spent_month_value = ttk.Label(self, textvariable=self.spent_month_var)
-        spent_month_value.grid(row=9, column=1, sticky="w", pady=(4, 0))
+        spent_month_value.grid(row=11, column=1, sticky="w", pady=(6, 0))
 
         remaining_month_label = ttk.Label(self, text="Remaining this month")
-        remaining_month_label.grid(row=10, column=0, sticky="w", pady=(4, 0))
+        remaining_month_label.grid(row=12, column=0, sticky="w", pady=(4, 0))
         remaining_month_value = ttk.Label(self, textvariable=self.remaining_month_var)
-        remaining_month_value.grid(row=10, column=1, sticky="w", pady=(4, 0))
+        remaining_month_value.grid(row=12, column=1, sticky="w", pady=(4, 0))
+
+        month_sep = ttk.Separator(self)
+        month_sep.grid(row=13, column=0, columnspan=2, sticky="ew", pady=(10, 8))
+
+        last_month_title = ttk.Label(self, text="Last month", font=("Segoe UI", 10, "bold"))
+        last_month_title.grid(row=14, column=0, columnspan=2, sticky="w")
 
         saved_last_month_label = ttk.Label(self, text="Amount saved last month")
-        saved_last_month_label.grid(row=11, column=0, sticky="w", pady=(4, 0))
+        saved_last_month_label.grid(row=15, column=0, sticky="w", pady=(6, 0))
         saved_last_month_value = ttk.Label(self, textvariable=self.saved_last_month_var)
-        saved_last_month_value.grid(row=11, column=1, sticky="w", pady=(4, 0))
+        saved_last_month_value.grid(row=15, column=1, sticky="w", pady=(6, 0))
 
         entry_sep = ttk.Separator(self)
-        entry_sep.grid(row=12, column=0, columnspan=2, sticky="ew", pady=(10, 8))
+        entry_sep.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(10, 8))
 
         exp_title = ttk.Label(self, text="Enter an expense (today)")
-        exp_title.grid(row=13, column=0, columnspan=2, sticky="w")
+        exp_title.grid(row=17, column=0, columnspan=2, sticky="w")
 
         exp_amount_label = ttk.Label(self, text="Amount")
-        exp_amount_label.grid(row=14, column=0, sticky="w", pady=(6, 0))
+        exp_amount_label.grid(row=18, column=0, sticky="w", pady=(6, 0))
         exp_amount_entry = ttk.Entry(self, textvariable=self.expense_amount_var)
-        exp_amount_entry.grid(row=14, column=1, sticky="ew", pady=(6, 0))
+        exp_amount_entry.grid(row=18, column=1, sticky="ew", pady=(6, 0))
         exp_amount_entry.bind("<Return>", lambda _e: self._on_add_expense())
 
         exp_note_label = ttk.Label(self, text="Note (optional)")
-        exp_note_label.grid(row=15, column=0, sticky="w", pady=(6, 0))
+        exp_note_label.grid(row=19, column=0, sticky="w", pady=(6, 0))
         exp_note_entry = ttk.Entry(self, textvariable=self.expense_note_var)
-        exp_note_entry.grid(row=15, column=1, sticky="ew", pady=(6, 0))
+        exp_note_entry.grid(row=19, column=1, sticky="ew", pady=(6, 0))
         exp_note_entry.bind("<Return>", lambda _e: self._on_add_expense())
 
         add_btn = ttk.Button(self, text="Add expense", command=self._on_add_expense)
-        add_btn.grid(row=16, column=1, sticky="e", pady=(8, 0))
+        add_btn.grid(row=20, column=1, sticky="e", pady=(8, 0))
 
         list_label = ttk.Label(self, text="Today’s expenses")
-        list_label.grid(row=17, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        list_label.grid(row=21, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
         self.expenses_list = tk.Listbox(self, height=6)
-        self.expenses_list.grid(row=18, column=0, columnspan=2, sticky="nsew")
+        self.expenses_list.grid(row=22, column=0, columnspan=2, sticky="nsew")
         self.expenses_list.bind("<<ListboxSelect>>", lambda _e: self._update_delete_button_state())
-        self.rowconfigure(18, weight=1)
+        self.rowconfigure(22, weight=1)
 
         self.delete_expense_btn = ttk.Button(self, text="Delete selected", command=self._on_delete_expense)
-        self.delete_expense_btn.grid(row=19, column=1, sticky="e", pady=(8, 0))
+        self.delete_expense_btn.grid(row=23, column=1, sticky="e", pady=(8, 0))
         self._update_delete_button_state()
 
         status = ttk.Label(self, textvariable=self.status_var)
-        status.grid(row=20, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        status.grid(row=24, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
 

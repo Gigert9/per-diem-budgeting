@@ -175,8 +175,8 @@ export function initApp(root: HTMLElement): void {
   container.appendChild(baseCard)
 
   const metricsCard = el('div', 'card')
-  const metrics = el('div', 'metrics')
-  metricsCard.appendChild(metrics)
+  const metricsRoot = el('div', 'metricsRoot')
+  metricsCard.appendChild(metricsRoot)
   container.appendChild(metricsCard)
 
   const expenseCard = el('div', 'card')
@@ -234,15 +234,28 @@ export function initApp(root: HTMLElement): void {
     status.textContent = msg
   }
 
-  function upsertMetric(labelText: string, valueText: string): void {
-    const item = el('div', 'metric')
+  function upsertMetric(parent: HTMLElement, labelText: string, valueText: string, opts?: { important?: boolean, fullWidth?: boolean }): void {
+    const cls = ['metric']
+    if (opts?.important) cls.push('important')
+    if (opts?.fullWidth) cls.push('full')
+    const item = el('div', cls.join(' '))
     const l = el('div')
     l.textContent = labelText
     const v = el('div', 'value')
     v.textContent = valueText
     item.appendChild(l)
     item.appendChild(v)
-    metrics.appendChild(item)
+    parent.appendChild(item)
+  }
+
+  function createMetricsSection(titleText: string): { section: HTMLElement, grid: HTMLElement } {
+    const section = el('div', 'metricsSection')
+    const title = el('div', 'metricsSectionTitle')
+    title.textContent = titleText
+    const grid = el('div', 'metrics')
+    section.appendChild(title)
+    section.appendChild(grid)
+    return { section, grid }
   }
 
   function updateDeleteExpenseUi(nowIso: string): void {
@@ -287,7 +300,7 @@ export function initApp(root: HTMLElement): void {
     const base = parseMoney(baseInput.value)
     if (base === null) {
       setStatus('Enter a valid number (example: 1000 or 1000.00).')
-      metrics.innerHTML = ''
+      metricsRoot.innerHTML = ''
       list.innerHTML = ''
       selectedExpenseStateIndex = null
       updateDeleteExpenseUi(todayIso())
@@ -304,14 +317,23 @@ export function initApp(root: HTMLElement): void {
     const todayRemaining = perDay - todaySpent
     const monthRemaining = base - monthSpent
 
-    metrics.innerHTML = ''
-    upsertMetric('Remaining days (incl. today)', String(remainingDays))
-    upsertMetric('You can spend per day', formatMoney(perDay))
-    upsertMetric('Spent today', formatMoney(todaySpent))
-    upsertMetric('Remaining today', formatMoney(todayRemaining))
-    upsertMetric('Spent this month', formatMoney(monthSpent))
-    upsertMetric('Remaining this month', formatMoney(monthRemaining))
-    upsertMetric('Amount saved last month', formatMoney(state.last_month_saved ?? 0))
+    metricsRoot.innerHTML = ''
+
+    const daily = createMetricsSection('Daily')
+    upsertMetric(daily.grid, 'Remaining days (incl. today)', String(remainingDays))
+    upsertMetric(daily.grid, 'You can spend per day', formatMoney(perDay))
+    upsertMetric(daily.grid, 'Spent today', formatMoney(todaySpent))
+    upsertMetric(daily.grid, 'Remaining today', formatMoney(todayRemaining), { important: true, fullWidth: true })
+    metricsRoot.appendChild(daily.section)
+
+    const month = createMetricsSection('This month')
+    upsertMetric(month.grid, 'Spent this month', formatMoney(monthSpent))
+    upsertMetric(month.grid, 'Remaining this month', formatMoney(monthRemaining))
+    metricsRoot.appendChild(month.section)
+
+    const lastMonth = createMetricsSection('Last month')
+    upsertMetric(lastMonth.grid, 'Amount saved last month', formatMoney(state.last_month_saved ?? 0))
+    metricsRoot.appendChild(lastMonth.section)
 
     renderTodayList(now)
 
