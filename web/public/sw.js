@@ -1,7 +1,7 @@
 /* eslint-disable no-restricted-globals */
 
 const CACHE_PREFIX = 'budgetapp-cache-'
-const CACHE_VERSION = 'v3'
+const CACHE_VERSION = 'v4'
 const CACHE_NAME = `${CACHE_PREFIX}${CACHE_VERSION}`
 
 const toUrl = (path) => new URL(path, self.registration.scope).toString()
@@ -15,8 +15,6 @@ const CORE_ASSETS = [
   toUrl('./icons/icon-512.png'),
   toUrl('./icons/icon-maskable-192.png'),
   toUrl('./icons/icon-maskable-512.png'),
-  toUrl('./icons/icon-monochrome-192.png'),
-  toUrl('./icons/icon-monochrome-512.png'),
   toUrl('./icons/apple-touch-icon.png')
 ]
 
