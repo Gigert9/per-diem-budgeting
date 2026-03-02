@@ -78,6 +78,22 @@ npm run build
 
 Output is in `web\dist\`.
 
+### Deploy to GitHub Pages
+This repo includes a GitHub Actions workflow that builds `web/` and publishes `web/dist` to GitHub Pages.
+
+Steps:
+1. Push to GitHub.
+2. In GitHub: **Settings → Pages**
+3. Set **Source** to **GitHub Actions**.
+4. Push any commit to `main` (or manually run the workflow).
+
+Your site URL will be:
+- `https://<your-username>.github.io/<repo-name>/`
+
+### Install on phones
+- iOS (Safari): open the Pages URL → Share → **Add to Home Screen**
+- Android (Chrome): open the Pages URL → tap **Install** in the app
+
 ## Data storage (no database)
 Settings are stored locally in a JSON file:
 - Windows: `%APPDATA%\BudgetApp\budgetapp.json`
