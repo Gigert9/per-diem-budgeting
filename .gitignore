@@ -13,3 +13,8 @@ venv/
 
 # App data (optional: keep local run artifacts out)
 *.log
+
+# Web (PWA)
+web/node_modules/
+web/dist/
+web/.vite/

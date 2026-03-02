@@ -13,6 +13,24 @@ function isInStandaloneMode(): boolean {
 }
 
 export function wireInstallAndUpdates(): void {
+  const installedKey = 'budgetapp__installed'
+
+  const markInstalled = (): void => {
+    try {
+      localStorage.setItem(installedKey, '1')
+    } catch {
+      // no-op
+    }
+    window.dispatchEvent(new CustomEvent('budgetapp:installed'))
+  }
+
+  if (isInStandaloneMode()) {
+    markInstalled()
+  }
+  window.addEventListener('appinstalled', () => {
+    markInstalled()
+  })
+
   // Offline caching + update check.
   // On open, ask the browser to check for a newer service worker.
   // If a new SW activates, reload once to pick up new assets.

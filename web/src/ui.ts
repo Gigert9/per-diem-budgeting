@@ -34,6 +34,8 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string): 
 }
 
 export function initApp(root: HTMLElement): void {
+  const installedKey = 'budgetapp__installed'
+
   let state: BudgetState = loadState()
 
   const today = todayIso()
@@ -64,11 +66,41 @@ export function initApp(root: HTMLElement): void {
   actions.appendChild(installBtn)
   container.appendChild(actions)
 
+  const isStandalone = (): boolean => {
+    // iOS Safari
+    // @ts-expect-error - navigator.standalone exists on iOS
+    if (typeof navigator.standalone === 'boolean') return navigator.standalone
+    return window.matchMedia('(display-mode: standalone)').matches
+  }
+
+  const isInstalled = (): boolean => {
+    if (isStandalone()) return true
+    try {
+      return localStorage.getItem(installedKey) === '1'
+    } catch {
+      return false
+    }
+  }
+
+  const updateInstallUi = (): void => {
+    if (isInstalled()) {
+      actions.style.display = 'none'
+    } else {
+      actions.style.display = 'flex'
+    }
+  }
+
+  updateInstallUi()
+
   window.addEventListener('budgetapp:canInstall', (e: any) => {
     const can = Boolean(e?.detail)
     // Keep the button clickable even if the browser doesn't expose an install
     // prompt (we show instructions in that case).
     installBtn.dataset.canInstall = can ? '1' : '0'
+  })
+
+  window.addEventListener('budgetapp:installed', () => {
+    updateInstallUi()
   })
 
   const installHelpBackdrop = el('div', 'modalBackdrop')
