@@ -11,7 +11,10 @@ from .logic import (
     BudgetState,
     Expense,
     compute_conservative_carryover_per_day,
+    compute_days_in_month,
+    compute_overspend_debt_for_month,
     compute_remaining_days_in_month,
+    compute_spend_per_day,
     expenses_for_date,
     expenses_for_month,
     sum_expenses,
@@ -42,10 +45,18 @@ class BudgetApp(ttk.Frame):
 
         self.expense_amount_var = tk.StringVar(value="")
         self.expense_note_var = tk.StringVar(value="")
+
+        self.history_date_var = tk.StringVar(value=date.today().isoformat())
+        self.history_amount_var = tk.StringVar(value="")
+        self.history_note_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="")
 
         self._today_expense_indices: list[int] = []
+        self._history_expense_indices: list[int] = []
         self.delete_expense_btn: ttk.Button | None = None
+        self.history_add_btn: ttk.Button | None = None
+        self.history_save_btn: ttk.Button | None = None
+        self.history_delete_btn: ttk.Button | None = None
 
         self._build_ui()
         self._recompute_and_render(save=False)
@@ -139,40 +150,97 @@ class BudgetApp(ttk.Frame):
         entry_sep = ttk.Separator(self)
         entry_sep.grid(row=16, column=0, columnspan=2, sticky="ew", pady=(10, 8))
 
-        exp_title = ttk.Label(self, text="Enter an expense (today)")
-        exp_title.grid(row=17, column=0, columnspan=2, sticky="w")
+        notebook = ttk.Notebook(self)
+        notebook.grid(row=17, column=0, columnspan=2, sticky="nsew")
+        self.rowconfigure(17, weight=1)
 
-        exp_amount_label = ttk.Label(self, text="Amount")
-        exp_amount_label.grid(row=18, column=0, sticky="w", pady=(6, 0))
-        exp_amount_entry = ttk.Entry(self, textvariable=self.expense_amount_var)
-        exp_amount_entry.grid(row=18, column=1, sticky="ew", pady=(6, 0))
+        today_tab = ttk.Frame(notebook, padding=0)
+        history_tab = ttk.Frame(notebook, padding=0)
+        notebook.add(today_tab, text="Today")
+        notebook.add(history_tab, text="History")
+
+        # --- Today tab ---
+        exp_title = ttk.Label(today_tab, text="Enter an expense (today)")
+        exp_title.grid(row=0, column=0, columnspan=2, sticky="w")
+
+        exp_amount_label = ttk.Label(today_tab, text="Amount")
+        exp_amount_label.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        exp_amount_entry = ttk.Entry(today_tab, textvariable=self.expense_amount_var)
+        exp_amount_entry.grid(row=1, column=1, sticky="ew", pady=(6, 0))
         exp_amount_entry.bind("<Return>", lambda _e: self._on_add_expense())
 
-        exp_note_label = ttk.Label(self, text="Note (optional)")
-        exp_note_label.grid(row=19, column=0, sticky="w", pady=(6, 0))
-        exp_note_entry = ttk.Entry(self, textvariable=self.expense_note_var)
-        exp_note_entry.grid(row=19, column=1, sticky="ew", pady=(6, 0))
+        exp_note_label = ttk.Label(today_tab, text="Note (optional)")
+        exp_note_label.grid(row=2, column=0, sticky="w", pady=(6, 0))
+        exp_note_entry = ttk.Entry(today_tab, textvariable=self.expense_note_var)
+        exp_note_entry.grid(row=2, column=1, sticky="ew", pady=(6, 0))
         exp_note_entry.bind("<Return>", lambda _e: self._on_add_expense())
 
-        add_btn = ttk.Button(self, text="Add expense", command=self._on_add_expense)
-        add_btn.grid(row=20, column=1, sticky="e", pady=(8, 0))
+        add_btn = ttk.Button(today_tab, text="Add expense", command=self._on_add_expense)
+        add_btn.grid(row=3, column=1, sticky="e", pady=(8, 0))
 
-        list_label = ttk.Label(self, text="Today’s expenses")
-        list_label.grid(row=21, column=0, columnspan=2, sticky="w", pady=(10, 4))
+        list_label = ttk.Label(today_tab, text="Today’s expenses")
+        list_label.grid(row=4, column=0, columnspan=2, sticky="w", pady=(10, 4))
 
-        self.expenses_list = tk.Listbox(self, height=6)
-        self.expenses_list.grid(row=22, column=0, columnspan=2, sticky="nsew")
+        self.expenses_list = tk.Listbox(today_tab, height=7)
+        self.expenses_list.grid(row=5, column=0, columnspan=2, sticky="nsew")
         self.expenses_list.bind("<<ListboxSelect>>", lambda _e: self._update_delete_button_state())
-        self.rowconfigure(22, weight=1)
+        today_tab.columnconfigure(1, weight=1)
+        today_tab.rowconfigure(5, weight=1)
 
-        self.delete_expense_btn = ttk.Button(self, text="Delete selected", command=self._on_delete_expense)
-        self.delete_expense_btn.grid(row=23, column=1, sticky="e", pady=(8, 0))
+        self.delete_expense_btn = ttk.Button(today_tab, text="Delete selected", command=self._on_delete_expense)
+        self.delete_expense_btn.grid(row=6, column=1, sticky="e", pady=(8, 0))
         self._update_delete_button_state()
 
+        # --- History tab ---
+        hist_title = ttk.Label(history_tab, text="Add / edit expenses (this month)")
+        hist_title.grid(row=0, column=0, columnspan=3, sticky="w")
+
+        hist_date_label = ttk.Label(history_tab, text="Date (YYYY-MM-DD)")
+        hist_date_label.grid(row=1, column=0, sticky="w", pady=(6, 0))
+        hist_date_entry = ttk.Entry(history_tab, textvariable=self.history_date_var)
+        hist_date_entry.grid(row=1, column=1, sticky="ew", pady=(6, 0))
+        hist_date_entry.bind("<Return>", lambda _e: self._on_history_load_date())
+        hist_load_btn = ttk.Button(history_tab, text="Load", command=self._on_history_load_date)
+        hist_load_btn.grid(row=1, column=2, sticky="e", pady=(6, 0))
+
+        hist_list_label = ttk.Label(history_tab, text="Expenses for selected day")
+        hist_list_label.grid(row=2, column=0, columnspan=3, sticky="w", pady=(10, 4))
+
+        self.history_list = tk.Listbox(history_tab, height=7)
+        self.history_list.grid(row=3, column=0, columnspan=3, sticky="nsew")
+        self.history_list.bind("<<ListboxSelect>>", lambda _e: self._on_history_select())
+
+        hist_amount_label = ttk.Label(history_tab, text="Amount")
+        hist_amount_label.grid(row=4, column=0, sticky="w", pady=(10, 0))
+        hist_amount_entry = ttk.Entry(history_tab, textvariable=self.history_amount_var)
+        hist_amount_entry.grid(row=4, column=1, columnspan=2, sticky="ew", pady=(10, 0))
+        hist_amount_entry.bind("<Return>", lambda _e: self._on_history_add())
+
+        hist_note_label = ttk.Label(history_tab, text="Note (optional)")
+        hist_note_label.grid(row=5, column=0, sticky="w", pady=(6, 0))
+        hist_note_entry = ttk.Entry(history_tab, textvariable=self.history_note_var)
+        hist_note_entry.grid(row=5, column=1, columnspan=2, sticky="ew", pady=(6, 0))
+        hist_note_entry.bind("<Return>", lambda _e: self._on_history_add())
+
+        btn_row = ttk.Frame(history_tab)
+        btn_row.grid(row=6, column=0, columnspan=3, sticky="e", pady=(10, 0))
+
+        self.history_add_btn = ttk.Button(btn_row, text="Add to this day", command=self._on_history_add)
+        self.history_add_btn.pack(side="left")
+        self.history_save_btn = ttk.Button(btn_row, text="Save changes", command=self._on_history_save)
+        self.history_save_btn.pack(side="left", padx=(8, 0))
+        self.history_delete_btn = ttk.Button(btn_row, text="Delete selected", command=self._on_history_delete)
+        self.history_delete_btn.pack(side="left", padx=(8, 0))
+
+        history_tab.columnconfigure(1, weight=1)
+        history_tab.rowconfigure(3, weight=1)
+
         status = ttk.Label(self, textvariable=self.status_var)
-        status.grid(row=24, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        status.grid(row=18, column=0, columnspan=2, sticky="w", pady=(12, 0))
 
         self.pack(fill="both", expand=True)
+
+        self._on_history_load_date()
 
     def _open_config(self) -> None:
         ensure_state_file(self.state)
@@ -193,6 +261,191 @@ class BudgetApp(ttk.Frame):
 
     def _format_money(self, amount: float) -> str:
         return f"{amount:.2f}"
+
+    def _parse_iso_date(self, value: str) -> date | None:
+        raw = value.strip()
+        if not raw:
+            return None
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            return None
+
+    def _is_current_month(self, d: date) -> bool:
+        today = date.today()
+        return d.year == today.year and d.month == today.month
+
+    def _render_history_expenses(self, target: date) -> None:
+        if not hasattr(self, "history_list"):
+            return
+
+        self.history_list.delete(0, tk.END)
+        self._history_expense_indices.clear()
+
+        target_iso = target.isoformat()
+        for idx, exp in enumerate(self.state.expenses):
+            if exp.date != target_iso:
+                continue
+            note = f" — {exp.note}" if exp.note else ""
+            self.history_list.insert(tk.END, f"{self._format_money(exp.amount)}{note}")
+            self._history_expense_indices.append(idx)
+
+        self._update_history_button_state()
+
+    def _update_history_button_state(self) -> None:
+        if not self.history_save_btn or not self.history_delete_btn:
+            return
+
+        sel = self.history_list.curselection() if hasattr(self, "history_list") else ()
+        if not sel:
+            self.history_save_btn.state(["disabled"])
+            self.history_delete_btn.state(["disabled"])
+            return
+
+        self.history_save_btn.state(["!disabled"])
+        self.history_delete_btn.state(["!disabled"])
+
+    def _on_history_load_date(self) -> None:
+        d = self._parse_iso_date(self.history_date_var.get())
+        if d is None:
+            self.status_var.set("Enter a valid date (YYYY-MM-DD).")
+            self._render_history_expenses(date.today())
+            return
+
+        if not self._is_current_month(d):
+            self.status_var.set("Pick a date in the current month.")
+            self._render_history_expenses(date.today())
+            return
+
+        self.status_var.set("")
+        self._render_history_expenses(d)
+
+    def _on_history_select(self) -> None:
+        sel = self.history_list.curselection()
+        if not sel:
+            self._update_history_button_state()
+            return
+
+        list_idx = int(sel[0])
+        if list_idx < 0 or list_idx >= len(self._history_expense_indices):
+            self._update_history_button_state()
+            return
+
+        state_idx = self._history_expense_indices[list_idx]
+        if state_idx < 0 or state_idx >= len(self.state.expenses):
+            self._update_history_button_state()
+            return
+
+        exp = self.state.expenses[state_idx]
+        self.history_amount_var.set(self._format_money(exp.amount))
+        self.history_note_var.set(exp.note or "")
+        self._update_history_button_state()
+
+    def _on_history_add(self) -> None:
+        d = self._parse_iso_date(self.history_date_var.get())
+        if d is None or not self._is_current_month(d):
+            self.status_var.set("Pick a date in the current month.")
+            return
+
+        amount = self._parse_money(self.history_amount_var.get())
+        if amount is None or amount <= 0:
+            self.status_var.set("Enter a positive expense amount.")
+            return
+
+        note = self.history_note_var.get().strip()
+        exp = Expense(date=d.isoformat(), amount=amount, note=note)
+        self.state.expenses.append(exp)
+        save_state(self.state)
+
+        self.history_amount_var.set("")
+        self.history_note_var.set("")
+        self.history_list.selection_clear(0, tk.END)
+
+        self._recompute_and_render(save=False)
+        self._render_history_expenses(d)
+        if not self.status_var.get():
+            self.status_var.set("Added.")
+
+    def _on_history_save(self) -> None:
+        d = self._parse_iso_date(self.history_date_var.get())
+        if d is None or not self._is_current_month(d):
+            self.status_var.set("Pick a date in the current month.")
+            return
+
+        sel = self.history_list.curselection()
+        if not sel:
+            self.status_var.set("Select an expense to edit.")
+            return
+
+        list_idx = int(sel[0])
+        if list_idx < 0 or list_idx >= len(self._history_expense_indices):
+            self.status_var.set("Select an expense to edit.")
+            return
+
+        state_idx = self._history_expense_indices[list_idx]
+        if state_idx < 0 or state_idx >= len(self.state.expenses):
+            self.status_var.set("Select an expense to edit.")
+            return
+
+        amount = self._parse_money(self.history_amount_var.get())
+        if amount is None or amount <= 0:
+            self.status_var.set("Enter a positive expense amount.")
+            return
+
+        note = self.history_note_var.get().strip()
+        exp = self.state.expenses[state_idx]
+        if exp.date != d.isoformat():
+            self.status_var.set("Select an expense from the loaded date.")
+            self._render_history_expenses(d)
+            return
+
+        exp.amount = amount
+        exp.note = note
+        save_state(self.state)
+
+        self._recompute_and_render(save=False)
+        self._render_history_expenses(d)
+        if not self.status_var.get():
+            self.status_var.set("Saved changes.")
+
+    def _on_history_delete(self) -> None:
+        d = self._parse_iso_date(self.history_date_var.get())
+        if d is None or not self._is_current_month(d):
+            self.status_var.set("Pick a date in the current month.")
+            return
+
+        sel = self.history_list.curselection()
+        if not sel:
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        list_idx = int(sel[0])
+        if list_idx < 0 or list_idx >= len(self._history_expense_indices):
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        state_idx = self._history_expense_indices[list_idx]
+        if state_idx < 0 or state_idx >= len(self.state.expenses):
+            self.status_var.set("Select an expense to delete.")
+            return
+
+        exp = self.state.expenses[state_idx]
+        if exp.date != d.isoformat():
+            self.status_var.set("Select an expense from the loaded date.")
+            self._render_history_expenses(d)
+            return
+
+        self.state.expenses.pop(state_idx)
+        save_state(self.state)
+
+        self.history_amount_var.set("")
+        self.history_note_var.set("")
+        self.history_list.selection_clear(0, tk.END)
+
+        self._recompute_and_render(save=False)
+        self._render_history_expenses(d)
+        if not self.status_var.get():
+            self.status_var.set("Deleted.")
 
     def _render_today_expenses(self, today: date) -> None:
         self.expenses_list.delete(0, tk.END)
@@ -232,11 +485,25 @@ class BudgetApp(ttk.Frame):
             return
 
         today = date.today()
+        days_in_month = compute_days_in_month(today)
         remaining_days = compute_remaining_days_in_month(today)
         today_spent = sum_expenses(expenses_for_date(self.state.expenses, today))
         month_spent = sum_expenses(expenses_for_month(self.state.expenses, today.year, today.month))
-        month_spent_before_today = month_spent - today_spent
-        per_day = compute_conservative_carryover_per_day(base, remaining_days, month_spent_before_today)
+
+        baseline_per_day = compute_spend_per_day(base, days_in_month)
+        overspend_debt = compute_overspend_debt_for_month(
+            self.state.expenses,
+            year=today.year,
+            month=today.month,
+            through_date_exclusive=today,
+            baseline_per_day=baseline_per_day,
+        )
+        per_day = compute_conservative_carryover_per_day(
+            base,
+            days_in_month=days_in_month,
+            remaining_days_incl_today=remaining_days,
+            overspend_debt=overspend_debt,
+        )
 
         today_remaining = per_day - today_spent
         month_remaining = base - month_spent
@@ -249,6 +516,12 @@ class BudgetApp(ttk.Frame):
         self.remaining_month_var.set(self._format_money(month_remaining))
         self.saved_last_month_var.set(self._format_money(self.state.last_month_saved))
         self._render_today_expenses(today)
+
+        # Keep history tab in sync if it exists.
+        if hasattr(self, "history_list"):
+            hist_date = self._parse_iso_date(self.history_date_var.get())
+            if hist_date is not None and self._is_current_month(hist_date):
+                self._render_history_expenses(hist_date)
 
         self.state.base_amount = base
         if save:

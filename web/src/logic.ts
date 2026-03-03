@@ -25,12 +25,21 @@ export function prevMonthKey(monthKey: string): string {
 }
 
 export function computeRemainingDaysInMonth(fromIso: string): number {
+  // IMPORTANT: do not use millisecond diffs across calendar dates.
+  // DST transitions (e.g. March) can make a "day" be 23/25 hours and
+  // produce off-by-one results. Use pure calendar math instead.
   const [y, m, d] = fromIso.split('-').map(Number)
-  const today = new Date(y, m - 1, d)
-  const firstNext = m === 12 ? new Date(y + 1, 0, 1) : new Date(y, m, 1)
-  const lastThis = new Date(firstNext.getTime() - 24 * 60 * 60 * 1000)
-  const diffDays = Math.floor((lastThis.getTime() - today.getTime()) / (24 * 60 * 60 * 1000)) + 1
-  return Math.max(1, diffDays)
+  const daysInMonth = computeDaysInMonth(fromIso)
+  const remaining = daysInMonth - d + 1
+  return Math.max(1, remaining)
+}
+
+export function computeDaysInMonth(fromIso: string): number {
+  const [y, m] = fromIso.split('-').map(Number)
+  // Use UTC so local DST offset changes cannot affect the result.
+  // JS months are 0-based; day 0 gives the last day of the previous month.
+  const lastDayUtc = new Date(Date.UTC(y, m, 0))
+  return lastDayUtc.getUTCDate()
 }
 
 export function sumExpenses(expenses: Expense[]): number {
@@ -46,21 +55,52 @@ export function expensesForMonth(expenses: Expense[], monthKey: string): Expense
   return expenses.filter((e) => typeof e.date === 'string' && e.date.startsWith(prefix))
 }
 
-export function computeSpendPerDay(baseAmount: number, remainingDays: number): number {
-  const days = remainingDays <= 0 ? 1 : remainingDays
+export function computeSpendPerDay(baseAmount: number, daysInMonth: number): number {
+  const days = daysInMonth <= 0 ? 1 : daysInMonth
   return baseAmount / days
 }
 
-export function computeConservativeCarryoverPerDay(
+export function computeNoRewardSpendPerDay(
   baseAmount: number,
-  remainingDays: number,
-  spentSoFarThisMonthExcludingToday: number
+  daysInMonth: number,
+  remainingDaysInclToday: number,
+  overspendDebt: number
 ): number {
-  const days = remainingDays <= 0 ? 1 : remainingDays
-  const baseline = computeSpendPerDay(baseAmount, days)
-  const remainingBudget = baseAmount - spentSoFarThisMonthExcludingToday
-  const fair = Math.max(0, remainingBudget / days)
-  return Math.min(baseline, fair)
+  // "No reward" model:
+  // - Daily target is static: base / days_in_month.
+  // - Underspending does NOT increase future per-day allowance.
+  // - Overspending creates a debt that reduces future per-day allowance.
+  const baseline = computeSpendPerDay(baseAmount, daysInMonth)
+  const days = remainingDaysInclToday <= 0 ? 1 : remainingDaysInclToday
+  const debt = Math.max(0, overspendDebt)
+  const penalty = debt / days
+  return Math.max(0, baseline - penalty)
+}
+
+export function computeOverspendDebt(
+  expenses: Expense[],
+  monthKey: string,
+  nowIso: string,
+  baselinePerDay: number
+): number {
+  // Overspend debt is the sum of (spent_that_day - baseline)+ for prior days.
+  // This intentionally does NOT let underspending "bank" credit.
+  const monthExpenses = expensesForMonth(expenses, monthKey)
+  const totalsByDate: Record<string, number> = {}
+  for (const e of monthExpenses) {
+    if (typeof e.date !== 'string') continue
+    // ISO date strings compare lexicographically.
+    if (e.date >= nowIso) continue // exclude today + any future dated items
+    const amt = Number.isFinite(e.amount) ? e.amount : 0
+    totalsByDate[e.date] = (totalsByDate[e.date] ?? 0) + amt
+  }
+
+  let debt = 0
+  for (const total of Object.values(totalsByDate)) {
+    const overspend = total - baselinePerDay
+    if (overspend > 0) debt += overspend
+  }
+  return debt
 }
 
 export function normalizeState(raw: unknown): BudgetState {

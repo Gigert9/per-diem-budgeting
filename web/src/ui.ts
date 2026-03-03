@@ -1,7 +1,10 @@
 import type { BudgetState, Expense } from './types'
 import {
-  computeConservativeCarryoverPerDay,
+  computeDaysInMonth,
+  computeNoRewardSpendPerDay,
+  computeOverspendDebt,
   computeRemainingDaysInMonth,
+  computeSpendPerDay,
   expensesForDate,
   expensesForMonth,
   rolloverMonthIfNeeded,
@@ -83,19 +86,13 @@ export function initApp(root: HTMLElement): void {
   }
 
   const updateInstallUi = (): void => {
-    if (isInstalled()) {
-      actions.style.display = 'none'
-    } else {
-      actions.style.display = 'flex'
-    }
+    actions.style.display = isInstalled() ? 'none' : 'flex'
   }
 
   updateInstallUi()
 
   window.addEventListener('budgetapp:canInstall', (e: any) => {
     const can = Boolean(e?.detail)
-    // Keep the button clickable even if the browser doesn't expose an install
-    // prompt (we show instructions in that case).
     installBtn.dataset.canInstall = can ? '1' : '0'
   })
 
@@ -128,6 +125,7 @@ export function initApp(root: HTMLElement): void {
       <p>2) Tap <strong>Install app</strong> or <strong>Add to Home screen</strong></p>
     `
   }
+
   const closeHelp = el('button') as HTMLButtonElement
   closeHelp.textContent = 'Close'
   closeHelp.addEventListener('click', () => {
@@ -179,6 +177,17 @@ export function initApp(root: HTMLElement): void {
   metricsCard.appendChild(metricsRoot)
   container.appendChild(metricsCard)
 
+  // Tabs (minimal, mobile-friendly)
+  const tabs = el('div', 'tabs')
+  const tabTodayBtn = el('button', 'primary') as HTMLButtonElement
+  tabTodayBtn.textContent = 'Today'
+  const tabHistoryBtn = el('button') as HTMLButtonElement
+  tabHistoryBtn.textContent = 'History'
+  tabs.appendChild(tabTodayBtn)
+  tabs.appendChild(tabHistoryBtn)
+  container.appendChild(tabs)
+
+  // Today
   const expenseCard = el('div', 'card')
   const expTitle = el('div')
   expTitle.style.fontWeight = '700'
@@ -218,17 +227,96 @@ export function initApp(root: HTMLElement): void {
   const list = el('ul', 'list')
   expenseCard.appendChild(list)
 
-  let selectedExpenseStateIndex: number | null = null
-
   const deleteExpenseBtn = el('button') as HTMLButtonElement
   deleteExpenseBtn.textContent = 'Delete selected'
   deleteExpenseBtn.disabled = true
   deleteExpenseBtn.style.marginTop = '10px'
   expenseCard.appendChild(deleteExpenseBtn)
+
   container.appendChild(expenseCard)
+
+  // History
+  const historyCard = el('div', 'card')
+  historyCard.style.display = 'none'
+  const historyTitle = el('div')
+  historyTitle.style.fontWeight = '700'
+  historyTitle.textContent = 'Expense history'
+  historyCard.appendChild(historyTitle)
+
+  const historyRow = el('div', 'row')
+  const historyDateField = el('div')
+  const historyDateLabel = el('label')
+  historyDateLabel.textContent = 'Date'
+  const historyDateInput = el('input') as HTMLInputElement
+  historyDateInput.type = 'date'
+  historyDateInput.value = todayIso()
+  {
+    const nowIso = todayIso()
+    const monthKey = monthKeyFromIso(nowIso)
+    const daysInMonth = computeDaysInMonth(nowIso)
+    historyDateInput.min = `${monthKey}-01`
+    historyDateInput.max = `${monthKey}-${String(daysInMonth).padStart(2, '0')}`
+  }
+  historyDateField.appendChild(historyDateLabel)
+  historyDateField.appendChild(historyDateInput)
+  historyRow.appendChild(historyDateField)
+  historyCard.appendChild(historyRow)
+
+  const historyListTitle = el('div')
+  historyListTitle.style.marginTop = '12px'
+  historyListTitle.style.fontWeight = '700'
+  historyListTitle.textContent = 'Expenses for selected day'
+  historyCard.appendChild(historyListTitle)
+
+  const historyList = el('ul', 'list')
+  historyCard.appendChild(historyList)
+
+  const historyEditTitle = el('div')
+  historyEditTitle.style.marginTop = '12px'
+  historyEditTitle.style.fontWeight = '700'
+  historyEditTitle.textContent = 'Add / edit'
+  historyCard.appendChild(historyEditTitle)
+
+  const historyEditRow = el('div', 'row')
+  const historyAmountField = el('div')
+  const historyAmountLabel = el('label')
+  historyAmountLabel.textContent = 'Amount'
+  const historyAmountInput = el('input') as HTMLInputElement
+  historyAmountInput.inputMode = 'decimal'
+  historyAmountField.appendChild(historyAmountLabel)
+  historyAmountField.appendChild(historyAmountInput)
+  historyEditRow.appendChild(historyAmountField)
+
+  const historyNoteField = el('div')
+  const historyNoteLabel = el('label')
+  historyNoteLabel.textContent = 'Note (optional)'
+  const historyNoteInput = el('input') as HTMLInputElement
+  historyNoteField.appendChild(historyNoteLabel)
+  historyNoteField.appendChild(historyNoteInput)
+  historyEditRow.appendChild(historyNoteField)
+  historyCard.appendChild(historyEditRow)
+
+  const historyButtons = el('div', 'actions')
+  const historyAddBtn = el('button', 'primary') as HTMLButtonElement
+  historyAddBtn.textContent = 'Add to this day'
+  const historySaveBtn = el('button', 'primary') as HTMLButtonElement
+  historySaveBtn.textContent = 'Save changes'
+  historySaveBtn.disabled = true
+  const historyDeleteBtn = el('button') as HTMLButtonElement
+  historyDeleteBtn.textContent = 'Delete selected'
+  historyDeleteBtn.disabled = true
+  historyButtons.appendChild(historyAddBtn)
+  historyButtons.appendChild(historySaveBtn)
+  historyButtons.appendChild(historyDeleteBtn)
+  historyCard.appendChild(historyButtons)
+
+  container.appendChild(historyCard)
 
   const status = el('div', 'status')
   container.appendChild(status)
+
+  let selectedExpenseStateIndex: number | null = null
+  let selectedHistoryExpenseStateIndex: number | null = null
 
   function setStatus(msg: string): void {
     status.textContent = msg
@@ -250,13 +338,33 @@ export function initApp(root: HTMLElement): void {
 
   function createMetricsSection(titleText: string): { section: HTMLElement, grid: HTMLElement } {
     const section = el('div', 'metricsSection')
-    const title = el('div', 'metricsSectionTitle')
-    title.textContent = titleText
+    const t = el('div', 'metricsSectionTitle')
+    t.textContent = titleText
     const grid = el('div', 'metrics')
-    section.appendChild(title)
+    section.appendChild(t)
     section.appendChild(grid)
     return { section, grid }
   }
+
+  function setTab(tab: 'today' | 'history'): void {
+    if (tab === 'today') {
+      tabTodayBtn.classList.add('primary')
+      tabHistoryBtn.classList.remove('primary')
+      expenseCard.style.display = ''
+      historyCard.style.display = 'none'
+      updateDeleteExpenseUi(todayIso())
+      return
+    }
+
+    tabHistoryBtn.classList.add('primary')
+    tabTodayBtn.classList.remove('primary')
+    expenseCard.style.display = 'none'
+    historyCard.style.display = ''
+    renderHistoryList(historyDateInput.value || todayIso())
+  }
+
+  tabTodayBtn.addEventListener('click', () => setTab('today'))
+  tabHistoryBtn.addEventListener('click', () => setTab('history'))
 
   function updateDeleteExpenseUi(nowIso: string): void {
     if (selectedExpenseStateIndex === null) {
@@ -265,6 +373,19 @@ export function initApp(root: HTMLElement): void {
     }
     const exp = state.expenses[selectedExpenseStateIndex]
     deleteExpenseBtn.disabled = !(exp && exp.date === nowIso)
+  }
+
+  function updateHistoryEditUi(): void {
+    const enabled = selectedHistoryExpenseStateIndex !== null
+    historySaveBtn.disabled = !enabled
+    historyDeleteBtn.disabled = !enabled
+  }
+
+  function clearHistorySelection(): void {
+    selectedHistoryExpenseStateIndex = null
+    historyAmountInput.value = ''
+    historyNoteInput.value = ''
+    updateHistoryEditUi()
   }
 
   function renderTodayList(nowIso: string): void {
@@ -288,12 +409,50 @@ export function initApp(root: HTMLElement): void {
       list.appendChild(li)
     }
 
-    // If the previously selected item is no longer in today's list, clear it.
     if (selectedExpenseStateIndex !== null) {
       const selected = state.expenses[selectedExpenseStateIndex]
       if (!selected || selected.date !== nowIso) selectedExpenseStateIndex = null
     }
     updateDeleteExpenseUi(nowIso)
+  }
+
+  function renderHistoryList(isoDate: string): void {
+    historyList.innerHTML = ''
+    const items: Array<{ exp: Expense, stateIndex: number }> = []
+    for (let i = 0; i < state.expenses.length; i++) {
+      const exp = state.expenses[i]
+      if (exp.date === isoDate) items.push({ exp, stateIndex: i })
+    }
+
+    if (items.length === 0) {
+      const li = el('li')
+      li.textContent = 'No expenses for this day.'
+      li.style.cursor = 'default'
+      historyList.appendChild(li)
+      clearHistorySelection()
+      return
+    }
+
+    for (const item of items) {
+      const li = el('li')
+      const note = item.exp.note ? ` — ${item.exp.note}` : ''
+      li.textContent = `${formatMoney(item.exp.amount)}${note}`
+      if (selectedHistoryExpenseStateIndex === item.stateIndex) li.classList.add('selected')
+      li.addEventListener('click', () => {
+        selectedHistoryExpenseStateIndex = item.stateIndex
+        historyAmountInput.value = formatMoney(item.exp.amount)
+        historyNoteInput.value = item.exp.note ?? ''
+        renderHistoryList(isoDate)
+        updateHistoryEditUi()
+      })
+      historyList.appendChild(li)
+    }
+
+    if (selectedHistoryExpenseStateIndex !== null) {
+      const selected = state.expenses[selectedHistoryExpenseStateIndex]
+      if (!selected || selected.date !== isoDate) clearHistorySelection()
+    }
+    updateHistoryEditUi()
   }
 
   function recomputeAndRender(opts: { save: boolean }): void {
@@ -302,18 +461,23 @@ export function initApp(root: HTMLElement): void {
       setStatus('Enter a valid number (example: 1000 or 1000.00).')
       metricsRoot.innerHTML = ''
       list.innerHTML = ''
+      historyList.innerHTML = ''
       selectedExpenseStateIndex = null
+      clearHistorySelection()
       updateDeleteExpenseUi(todayIso())
       return
     }
 
     const now = todayIso()
+    const daysInMonth = computeDaysInMonth(now)
     const remainingDays = computeRemainingDaysInMonth(now)
     const todaySpent = sumExpenses(expensesForDate(state.expenses, now))
     const monthKey = monthKeyFromIso(now)
     const monthSpent = sumExpenses(expensesForMonth(state.expenses, monthKey))
-    const monthSpentBeforeToday = monthSpent - todaySpent
-    const perDay = computeConservativeCarryoverPerDay(base, remainingDays, monthSpentBeforeToday)
+    const baselinePerDay = computeSpendPerDay(base, daysInMonth)
+    const overspendDebt = computeOverspendDebt(state.expenses, monthKey, now, baselinePerDay)
+    const perDay = computeNoRewardSpendPerDay(base, daysInMonth, remainingDays, overspendDebt)
+
     const todayRemaining = perDay - todaySpent
     const monthRemaining = base - monthSpent
 
@@ -336,6 +500,10 @@ export function initApp(root: HTMLElement): void {
     metricsRoot.appendChild(lastMonth.section)
 
     renderTodayList(now)
+
+    if (historyCard.style.display !== 'none') {
+      renderHistoryList(historyDateInput.value || now)
+    }
 
     state.base_amount = base
     if (!state.monthly_bases) state.monthly_bases = {}
@@ -374,6 +542,14 @@ export function initApp(root: HTMLElement): void {
     recomputeAndRender({ save: false })
   }
 
+  addExpenseBtn.addEventListener('click', addExpense)
+  amountInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addExpense()
+  })
+  noteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') addExpense()
+  })
+
   deleteExpenseBtn.addEventListener('click', () => {
     const nowIso = todayIso()
     if (selectedExpenseStateIndex === null) {
@@ -395,14 +571,88 @@ export function initApp(root: HTMLElement): void {
     if (!status.textContent) setStatus('Deleted.')
   })
 
-  addExpenseBtn.addEventListener('click', addExpense)
-  amountInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addExpense()
+  historyDateInput.addEventListener('change', () => {
+    clearHistorySelection()
+    renderHistoryList(historyDateInput.value || todayIso())
   })
-  noteInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') addExpense()
+
+  function addHistoryExpense(): void {
+    const iso = historyDateInput.value || todayIso()
+    const amount = parseMoney(historyAmountInput.value)
+    if (amount === null || amount <= 0) {
+      setStatus('Enter a positive expense amount.')
+      return
+    }
+    const note = historyNoteInput.value.trim()
+    const exp: Expense = { date: iso, amount, note: note || undefined }
+    state.expenses.push(exp)
+    saveState(state)
+    clearHistorySelection()
+    recomputeAndRender({ save: false })
+    if (!status.textContent) setStatus('Added.')
+  }
+
+  function saveHistoryEdit(): void {
+    const idx = selectedHistoryExpenseStateIndex
+    if (idx === null) {
+      setStatus('Select an expense to edit.')
+      return
+    }
+    const iso = historyDateInput.value || todayIso()
+    const exp = state.expenses[idx]
+    if (!exp || exp.date !== iso) {
+      clearHistorySelection()
+      renderHistoryList(iso)
+      setStatus('Select an expense from the list to edit.')
+      return
+    }
+
+    const amount = parseMoney(historyAmountInput.value)
+    if (amount === null || amount <= 0) {
+      setStatus('Enter a positive expense amount.')
+      return
+    }
+
+    const note = historyNoteInput.value.trim()
+    exp.amount = amount
+    exp.note = note || undefined
+    saveState(state)
+    recomputeAndRender({ save: false })
+    if (!status.textContent) setStatus('Saved changes.')
+  }
+
+  historyAddBtn.addEventListener('click', addHistoryExpense)
+
+  historySaveBtn.addEventListener('click', saveHistoryEdit)
+  historyAmountInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveHistoryEdit()
+  })
+  historyNoteInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') saveHistoryEdit()
+  })
+
+  historyDeleteBtn.addEventListener('click', () => {
+    const idx = selectedHistoryExpenseStateIndex
+    if (idx === null) {
+      setStatus('Select an expense to delete.')
+      return
+    }
+    const iso = historyDateInput.value || todayIso()
+    const exp = state.expenses[idx]
+    if (!exp || exp.date !== iso) {
+      clearHistorySelection()
+      renderHistoryList(iso)
+      setStatus('Select an expense from the list to delete.')
+      return
+    }
+    state.expenses.splice(idx, 1)
+    saveState(state)
+    clearHistorySelection()
+    recomputeAndRender({ save: false })
+    if (!status.textContent) setStatus('Deleted.')
   })
 
   // initial render
   recomputeAndRender({ save: false })
+  setTab('today')
 }

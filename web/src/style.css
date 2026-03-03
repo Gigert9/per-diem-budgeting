@@ -169,6 +169,17 @@ button:disabled {
   margin-top: 10px;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 10px 0;
+}
+
+.tabs button {
+  flex: 1;
+}
+
 .modalBackdrop {
   position: fixed;
   inset: 0;
