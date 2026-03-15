@@ -11,7 +11,7 @@ import {
   sumExpenses,
   todayIso
 } from './logic'
-import { loadState, saveState } from './storage'
+import { exportStateJson, importStateJson, loadState, saveState } from './storage'
 
 function formatMoney(n: number): string {
   if (!Number.isFinite(n)) return '0.00'
@@ -312,6 +312,30 @@ export function initApp(root: HTMLElement): void {
 
   container.appendChild(historyCard)
 
+  // Backup (export/import)
+  const backupCard = el('div', 'card')
+  const backupTitle = el('div')
+  backupTitle.style.fontWeight = '700'
+  backupTitle.textContent = 'Backup'
+  backupCard.appendChild(backupTitle)
+
+  const backupActions = el('div', 'actions')
+  const exportBtn = el('button', 'primary') as HTMLButtonElement
+  exportBtn.textContent = 'Export JSON'
+  const importBtn = el('button') as HTMLButtonElement
+  importBtn.textContent = 'Import JSON'
+  backupActions.appendChild(exportBtn)
+  backupActions.appendChild(importBtn)
+  backupCard.appendChild(backupActions)
+
+  const importInput = el('input') as HTMLInputElement
+  importInput.type = 'file'
+  importInput.accept = 'application/json,.json'
+  importInput.style.display = 'none'
+  backupCard.appendChild(importInput)
+
+  container.appendChild(backupCard)
+
   const status = el('div', 'status')
   container.appendChild(status)
 
@@ -320,6 +344,17 @@ export function initApp(root: HTMLElement): void {
 
   function setStatus(msg: string): void {
     status.textContent = msg
+  }
+
+  function downloadTextFile(filename: string, content: string, mime: string): void {
+    const blob = new Blob([content], { type: mime })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.rel = 'noopener'
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 1000)
   }
 
   function upsertMetric(parent: HTMLElement, labelText: string, valueText: string, opts?: { important?: boolean, fullWidth?: boolean }): void {
@@ -574,6 +609,45 @@ export function initApp(root: HTMLElement): void {
   historyDateInput.addEventListener('change', () => {
     clearHistorySelection()
     renderHistoryList(historyDateInput.value || todayIso())
+  })
+
+  exportBtn.addEventListener('click', () => {
+    try {
+      const iso = todayIso()
+      const filename = `budgetapp-backup-${iso}.json`
+      downloadTextFile(filename, exportStateJson(), 'application/json')
+      setStatus('Backup exported.')
+    } catch {
+      setStatus('Could not export backup.')
+    }
+  })
+
+  importBtn.addEventListener('click', () => {
+    importInput.value = ''
+    importInput.click()
+  })
+
+  importInput.addEventListener('change', async () => {
+    const file = importInput.files?.[0]
+    if (!file) return
+    const ok = window.confirm('Importing a backup will overwrite your current data on this device. Continue?')
+    if (!ok) return
+
+    try {
+      const text = await file.text()
+      state = importStateJson(text)
+      const today = todayIso()
+      const rollover = rolloverMonthIfNeeded(state, today)
+      if (rollover.changed) saveState(state)
+      baseInput.value = formatMoney(state.base_amount)
+      selectedExpenseStateIndex = null
+      clearHistorySelection()
+      recomputeAndRender({ save: false })
+      setTab('today')
+      setStatus('Backup imported.')
+    } catch {
+      setStatus('Import failed. Please select a valid BudgetApp JSON backup.')
+    }
   })
 
   function addHistoryExpense(): void {

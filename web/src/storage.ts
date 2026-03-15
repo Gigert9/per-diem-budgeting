@@ -18,5 +18,17 @@ export function saveState(state: BudgetState): void {
 }
 
 export function exportStateJson(): string {
-  return localStorage.getItem(KEY) ?? JSON.stringify(normalizeState(null))
+  // Export a normalized, parseable representation even if storage is corrupted.
+  try {
+    return JSON.stringify(loadState())
+  } catch {
+    return JSON.stringify(normalizeState(null))
+  }
+}
+
+export function importStateJson(rawJson: string): BudgetState {
+  const parsed = JSON.parse(rawJson) as unknown
+  const normalized = normalizeState(parsed)
+  saveState(normalized)
+  return normalized
 }
