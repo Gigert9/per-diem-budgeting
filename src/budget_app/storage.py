@@ -3,14 +3,21 @@ from __future__ import annotations
 import json
 import os
 from dataclasses import asdict
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-from .logic import BudgetState, Expense, expenses_for_month, sum_expenses
+from .logic import (
+    BudgetState,
+    DeletedExpense,
+    Expense,
+    MonthSummary,
+    RecurringExpense,
+    expenses_for_month,
+    sum_expenses,
+)
 
 
 def _data_path() -> Path:
-    # Prefer %APPDATA% on Windows, fallback to ~/.config
     appdata = os.environ.get("APPDATA")
     if appdata:
         base_dir = Path(appdata) / "BudgetApp"
@@ -21,26 +28,27 @@ def _data_path() -> Path:
 
 
 def data_path() -> Path:
-    """Public accessor for the app's JSON config/data file path."""
     return _data_path()
 
 
 def ensure_state_file(state: BudgetState | None = None) -> bool:
-    """Ensure the config/data JSON file exists.
-
-    Returns True if it created the file.
-    """
     path = _data_path()
     if path.exists():
         return False
     if state is None:
         state = BudgetState()
     try:
-        payload = asdict(state)
-        path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        path.write_text(json.dumps(_state_to_dict(state), indent=2), encoding="utf-8")
     except OSError:
         return False
     return True
+
+
+def _state_to_dict(state: BudgetState) -> dict:
+    """Convert BudgetState to a JSON-serialisable dict."""
+    d = asdict(state)
+    # monthly_summaries values are dicts (from asdict on MonthSummary dataclass)
+    return d
 
 
 def load_state() -> BudgetState:
@@ -59,35 +67,30 @@ def load_state() -> BudgetState:
         base_amount = 0.0
 
     expenses: list[Expense] = []
-    raw_expenses = raw.get("expenses", [])
-    if isinstance(raw_expenses, list):
-        for item in raw_expenses:
-            if not isinstance(item, dict):
-                continue
-            date_str = item.get("date")
-            amount = item.get("amount")
-            note = item.get("note", "")
-            if not isinstance(date_str, str):
-                continue
-            try:
-                amount_f = float(amount)
-            except (TypeError, ValueError):
-                continue
-            if not isinstance(note, str):
-                note = str(note)
-            expenses.append(Expense(date=date_str, amount=amount_f, note=note))
+    for item in raw.get("expenses", []):
+        if not isinstance(item, dict):
+            continue
+        date_str = item.get("date")
+        amount = item.get("amount")
+        note = item.get("note", "")
+        if not isinstance(date_str, str):
+            continue
+        try:
+            amount_f = float(amount)
+        except (TypeError, ValueError):
+            continue
+        if not isinstance(note, str):
+            note = str(note)
+        expenses.append(Expense(date=date_str, amount=amount_f, note=note))
 
-    # Optional persisted fields (backward compatible).
-    monthly_bases_raw = raw.get("monthly_bases", {})
     monthly_bases: dict[str, float] = {}
-    if isinstance(monthly_bases_raw, dict):
-        for k, v in monthly_bases_raw.items():
-            if not isinstance(k, str):
-                continue
-            try:
-                monthly_bases[k] = float(v)
-            except (TypeError, ValueError):
-                continue
+    for k, v in raw.get("monthly_bases", {}).items():
+        if not isinstance(k, str):
+            continue
+        try:
+            monthly_bases[k] = float(v)
+        except (TypeError, ValueError):
+            continue
 
     last_rollover_month = raw.get("last_rollover_month", "")
     if not isinstance(last_rollover_month, str):
@@ -103,6 +106,70 @@ def load_state() -> BudgetState:
     except (TypeError, ValueError):
         last_month_saved = 0.0
 
+    recurring: list[RecurringExpense] = []
+    for item in raw.get("recurring", []):
+        if not isinstance(item, dict):
+            continue
+        rid = item.get("id")
+        if not isinstance(rid, str) or not rid:
+            import uuid
+            rid = str(uuid.uuid4())
+        try:
+            r_amount = float(item.get("amount", 0))
+            r_day = int(item.get("day", 0))
+        except (TypeError, ValueError):
+            continue
+        if r_amount <= 0 or r_day < 1 or r_day > 31:
+            continue
+        r_note = item.get("note", "")
+        if not isinstance(r_note, str):
+            r_note = ""
+        recurring.append(RecurringExpense(id=rid, amount=r_amount, day=r_day, note=r_note))
+
+    recently_deleted: list[DeletedExpense] = []
+    cutoff = _utc_now_iso()
+    for item in raw.get("recently_deleted", []):
+        if not isinstance(item, dict):
+            continue
+        deleted_at = item.get("deleted_at", "")
+        if not isinstance(deleted_at, str) or not deleted_at:
+            continue
+        # Prune items older than 24 hours
+        if not _within_24h(deleted_at, cutoff):
+            continue
+        d_date = item.get("date", "")
+        d_amount = item.get("amount", 0)
+        d_note = item.get("note", "")
+        if not isinstance(d_date, str):
+            continue
+        try:
+            d_amount_f = float(d_amount)
+        except (TypeError, ValueError):
+            continue
+        recently_deleted.append(DeletedExpense(
+            date=d_date, amount=d_amount_f,
+            note=str(d_note) if not isinstance(d_note, str) else d_note,
+            deleted_at=deleted_at,
+        ))
+
+    monthly_summaries: dict[str, MonthSummary] = {}
+    for k, v in raw.get("monthly_summaries", {}).items():
+        if not isinstance(k, str) or not isinstance(v, dict):
+            continue
+        try:
+            ms = MonthSummary(
+                base=float(v.get("base", 0)),
+                spent=float(v.get("spent", 0)),
+                saved=float(v.get("saved", 0)),
+            )
+            monthly_summaries[k] = ms
+        except (TypeError, ValueError):
+            continue
+
+    theme = raw.get("theme", "light")
+    if theme not in ("light", "dark"):
+        theme = "light"
+
     return BudgetState(
         base_amount=base_amount,
         expenses=expenses,
@@ -110,7 +177,26 @@ def load_state() -> BudgetState:
         last_rollover_month=last_rollover_month,
         last_month_key=last_month_key,
         last_month_saved=last_month_saved,
+        recurring=recurring,
+        recently_deleted=recently_deleted,
+        monthly_summaries=monthly_summaries,
+        theme=theme,
     )
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(tz=timezone.utc).isoformat()
+
+
+def _within_24h(deleted_at: str, now_iso: str) -> bool:
+    """Return True if deleted_at is within the last 24 hours of now_iso."""
+    try:
+        dt_deleted = datetime.fromisoformat(deleted_at.replace("Z", "+00:00"))
+        dt_now = datetime.fromisoformat(now_iso.replace("Z", "+00:00"))
+        from datetime import timedelta
+        return (dt_now - dt_deleted) <= timedelta(hours=24)
+    except (ValueError, TypeError):
+        return False
 
 
 def _month_key(d: date) -> str:
@@ -124,10 +210,6 @@ def _prev_month_key(d: date) -> str:
 
 
 def rollover_month_if_needed(state: BudgetState, *, today: date | None = None) -> bool:
-    """Compute and persist "amount saved last month" once per calendar month.
-
-    Returns True if state was modified.
-    """
     if today is None:
         today = date.today()
 
@@ -146,10 +228,19 @@ def rollover_month_if_needed(state: BudgetState, *, today: date | None = None) -
     state.last_month_key = prev_key
     state.last_month_saved = prev_saved
     state.last_rollover_month = current_key
+
+    state.monthly_summaries[prev_key] = MonthSummary(
+        base=float(prev_base), spent=float(prev_spent), saved=float(prev_saved)
+    )
+
+    # Keep at most 12 months of summaries
+    keys = sorted(state.monthly_summaries.keys())
+    for old_key in keys[:-12]:
+        del state.monthly_summaries[old_key]
+
     return True
 
 
 def save_state(state: BudgetState) -> None:
     path = _data_path()
-    payload = asdict(state)
-    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    path.write_text(json.dumps(_state_to_dict(state), indent=2), encoding="utf-8")

@@ -3,11 +3,19 @@ import { normalizeState } from './logic'
 
 const KEY = 'budgetapp_state_v1'
 
+function pruneRecentlyDeleted(state: BudgetState): void {
+  if (!state.recently_deleted?.length) return
+  const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  state.recently_deleted = state.recently_deleted.filter((d) => d.deleted_at > cutoff)
+}
+
 export function loadState(): BudgetState {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return normalizeState(null)
-    return normalizeState(JSON.parse(raw))
+    const state = normalizeState(JSON.parse(raw))
+    pruneRecentlyDeleted(state)
+    return state
   } catch {
     return normalizeState(null)
   }

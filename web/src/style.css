@@ -2,12 +2,63 @@
   color-scheme: light;
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
   line-height: 1.4;
+
+  --bg: #fff;
+  --bg-card: #fff;
+  --bg-btn: #f8f8f8;
+  --bg-list-selected: #f8f8f8;
+  --bg-input: #fff;
+  --text: #111;
+  --text-label: #333;
+  --text-status: #444;
+  --text-streak: #16a34a;
+  --border: #e5e5e5;
+  --border-input: #ccc;
+  --border-section: #eee;
+  --primary-bg: #111;
+  --primary-text: #fff;
+  --primary-border: #111;
+  --bar-bg: #e5e7eb;
+  --bar-green: #22c55e;
+  --bar-red: #ef4444;
+  --recovery-bg: #fff7ed;
+  --recovery-border: #fed7aa;
+  --recovery-text: #9a3412;
+  --preview-text: #2563eb;
+  --summary-alt: #f9f9f9;
+}
+
+body.dark {
+  color-scheme: dark;
+  --bg: #1a1a1a;
+  --bg-card: #222;
+  --bg-btn: #2a2a2a;
+  --bg-list-selected: #2a2a2a;
+  --bg-input: #2a2a2a;
+  --text: #e5e5e5;
+  --text-label: #aaa;
+  --text-status: #aaa;
+  --text-streak: #4ade80;
+  --border: #333;
+  --border-input: #555;
+  --border-section: #333;
+  --primary-bg: #e5e5e5;
+  --primary-text: #111;
+  --primary-border: #e5e5e5;
+  --bar-bg: #333;
+  --bar-green: #16a34a;
+  --bar-red: #dc2626;
+  --recovery-bg: #431407;
+  --recovery-border: #9a3412;
+  --recovery-text: #fdba74;
+  --preview-text: #93c5fd;
+  --summary-alt: #2a2a2a;
 }
 
 body {
   margin: 0;
-  background: #fff;
-  color: #111;
+  background: var(--bg);
+  color: var(--text);
 }
 
 .container {
@@ -21,6 +72,13 @@ body {
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+}
+
+.headerActions {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
 }
 
 .logo {
@@ -47,44 +105,56 @@ body {
 }
 
 .card {
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 12px;
   margin: 10px 0;
+  background: var(--bg-card);
 }
 
 label {
   font-size: 12px;
-  color: #333;
+  color: var(--text-label);
 }
 
 input {
   width: 100%;
   padding: 10px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--border-input);
   border-radius: 8px;
   font-size: 16px;
   box-sizing: border-box;
+  background: var(--bg-input);
+  color: var(--text);
 }
 
 button {
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid #ccc;
-  background: #f8f8f8;
+  border: 1px solid var(--border-input);
+  background: var(--bg-btn);
+  color: var(--text);
   cursor: pointer;
   font-size: 14px;
 }
 
 button.primary {
-  background: #111;
-  color: #fff;
-  border-color: #111;
+  background: var(--primary-bg);
+  color: var(--primary-text);
+  border-color: var(--primary-border);
 }
 
 button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Base preview line shown while typing a new budget amount */
+.basePreview {
+  font-size: 12px;
+  color: var(--preview-text);
+  margin-top: 6px;
+  min-height: 16px;
 }
 
 .metrics {
@@ -101,7 +171,7 @@ button:disabled {
 
 .metricsSection {
   padding-top: 12px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--border-section);
 }
 
 .metricsSection:first-child {
@@ -140,10 +210,31 @@ button:disabled {
   font-weight: 600;
 }
 
+/* Streak badge shown inline under the daily section title */
+.streakBadge {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-streak);
+  margin-left: 8px;
+}
+
+/* Recovery mode callout when daily allowance hits $0 */
+.recoveryNote {
+  grid-column: 1 / -1;
+  background: var(--recovery-bg);
+  border: 1px solid var(--recovery-border);
+  color: var(--recovery-text);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
 .status {
   margin-top: 10px;
   font-size: 12px;
-  color: #444;
+  color: var(--text-status);
 }
 
 .list {
@@ -154,12 +245,13 @@ button:disabled {
 
 .list li {
   padding: 10px 0;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid var(--border-section);
   cursor: pointer;
+  color: var(--text);
 }
 
 .list li.selected {
-  background: #f8f8f8;
+  background: var(--bg-list-selected);
 }
 
 .actions {
@@ -193,10 +285,11 @@ button:disabled {
 .modal {
   width: 100%;
   max-width: 520px;
-  background: white;
+  background: var(--bg-card);
   border-radius: 12px;
-  border: 1px solid #e5e5e5;
+  border: 1px solid var(--border);
   padding: 14px;
+  color: var(--text);
 }
 
 .modal h2 {
@@ -207,4 +300,114 @@ button:disabled {
 .modal p {
   margin: 8px 0;
   font-size: 14px;
+}
+
+/* ── Trend tab ── */
+.trendList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.trendRow {
+  display: grid;
+  grid-template-columns: 56px 64px 1fr 44px;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.trendDate {
+  color: var(--text-label);
+  white-space: nowrap;
+}
+
+.trendAmount {
+  text-align: right;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.trendBarWrap {
+  background: var(--bar-bg);
+  border-radius: 4px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.trendBarFill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.2s;
+}
+
+.trendBarFill.under {
+  background: var(--bar-green);
+}
+
+.trendBarFill.over {
+  background: var(--bar-red);
+}
+
+.trendTag {
+  font-size: 11px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.trendTag.under {
+  color: var(--bar-green);
+}
+
+.trendTag.over {
+  color: var(--bar-red);
+}
+
+/* ── Monthly summaries table in Trend tab ── */
+.summaryTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+.summaryTable th {
+  text-align: left;
+  font-weight: 600;
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-label);
+}
+
+.summaryTable td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--border-section);
+}
+
+.summaryTable tr:nth-child(even) td {
+  background: var(--summary-alt);
+}
+
+.summaryTable .saved-pos {
+  color: var(--bar-green);
+  font-weight: 600;
+}
+
+.summaryTable .saved-neg {
+  color: var(--bar-red);
+  font-weight: 600;
+}
+
+/* ── Recurring tab ── */
+.recurringNote {
+  font-size: 12px;
+  color: var(--text-label);
+  margin-bottom: 10px;
+}
+
+.recurringTotal {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 8px;
 }
