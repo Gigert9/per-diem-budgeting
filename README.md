@@ -3,24 +3,41 @@
 Small offline budgeting helper.
 
 ## What it does
-- You enter a **base amount**.
-- The app computes **spend per day** as:
 
-$$\text{per_day} = \frac{\text{base}}{\text{remaining_days_in_month}}$$
+### Daily spending limit
+You enter a **monthly budget**. The app computes a flat daily limit:
 
-Where **remaining days** includes today.
+```
+daily limit = (monthly budget − recurring expenses) / days in month
+```
 
-## Expenses
-- You can add expenses for **today** (amount + optional note).
-- Expenses do **not** change your saved base amount or the planned $/day number.
-- They do update:
-	- **Spent today**
-	- **Remaining today** (planned per-day minus today’s spending)
-	- **Spent this month**
+This number is fixed for the entire month — it does **not** drift up or down as days pass.
 
-Daily allowance behavior:
-- If you **overspend** on a day, future days’ per-day allowance is **reduced** to compensate.
-- If you **underspend**, future days’ per-day allowance does **not** increase (conservative mode).
+### No-reward model
+- If you **underspend** today, the surplus disappears. Tomorrow’s limit is the same flat amount.
+- If you **overspend** today, a **"Tomorrow’s daily limit"** warning appears showing a reduced limit for tomorrow and the remaining days of the month (to compensate for today’s overage). This line is hidden when you are within today’s limit.
+
+### Recurring expenses
+Add fixed monthly costs (rent, subscriptions, etc.) with a day-of-month. Their total is pre-deducted from the monthly budget before the daily limit is calculated, so recurring costs never compete with your discretionary spending.
+
+### Today tab
+- Log expenses with an optional note. Each entry updates **Spent today** and **Remaining today** live.
+- Delete any expense and optionally **undo** within 24 hours.
+
+### History tab
+Add, edit, or delete expenses for any day in the **current month**. Useful for catching up on days you forgot to log.
+
+### Streak
+A streak counter shows how many consecutive days (counting back from yesterday) you stayed at or under the daily limit. Today’s spending doesn’t break the streak until tomorrow.
+
+### Trend tab
+A text chart of every day so far this month, showing spending vs the daily limit (OK / OVER), plus a **Past months** summary table (up to 12 months) with budget, spent, and saved.
+
+### Recovery warning
+If your total spending this month exceeds the full monthly budget, a warning appears: *"Monthly budget exceeded by $X — Y days left."* This is the only condition that triggers a recovery message — staying under the daily limit keeps it silent.
+
+### Month rollover
+On the first open of a new month the app automatically records last month’s result: how much of the budget was spent and how much was saved (or overspent). This feeds the **Amount saved last month** metric and the Trend history.
 
 ## Run
 From the repo root:

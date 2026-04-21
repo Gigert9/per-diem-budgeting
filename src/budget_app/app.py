@@ -13,9 +13,7 @@ from .logic import (
     DeletedExpense,
     Expense,
     RecurringExpense,
-    compute_conservative_carryover_per_day,
     compute_days_in_month,
-    compute_overspend_debt_for_month,
     compute_projected_allowance,
     compute_recurring_total,
     compute_remaining_days_in_month,
@@ -122,6 +120,8 @@ class BudgetApp(ttk.Frame):
         self.streak_label: ttk.Label | None = None
         self.recurring_reserved_label: ttk.Label | None = None
         self.recurring_reserved_value_label: ttk.Label | None = None
+        self._projected_label: ttk.Label | None = None
+        self._projected_value_label: ttk.Label | None = None
 
         self._all_widgets: list[tk.Widget] = []
 
@@ -215,7 +215,10 @@ class BudgetApp(ttk.Frame):
 
         self._add_metric(6, "Remaining days (incl. today)", self.remaining_days_var)
         self._add_metric(7, "You can spend per day", self.per_day_var, bold=True)
-        self._add_metric(8, "If done today, tomorrow:", self.projected_var)
+        self._projected_label = ttk.Label(self, text="Tomorrow's daily limit")
+        self._projected_label.grid(row=8, column=0, sticky="w", pady=(4, 0))
+        self._projected_value_label = ttk.Label(self, textvariable=self.projected_var)
+        self._projected_value_label.grid(row=8, column=1, sticky="w", pady=(4, 0))
         self._add_metric(9, "Spent today", self.spent_today_var)
         self._add_metric(10, "Remaining today", self.remaining_today_var, bold=True)
 
@@ -435,29 +438,11 @@ class BudgetApp(ttk.Frame):
             return
         today = date.today()
         days_in_month = compute_days_in_month(today)
-        remaining_days = compute_remaining_days_in_month(today)
         recurring_total = compute_recurring_total(self.state.recurring)
         effective_new = max(0.0, new_base - recurring_total)
         effective_cur = max(0.0, self.state.base_amount - recurring_total)
-
-        new_baseline = compute_spend_per_day(effective_new, days_in_month)
-        new_debt = compute_overspend_debt_for_month(
-            self.state.expenses, year=today.year, month=today.month,
-            through_date_exclusive=today, baseline_per_day=new_baseline,
-        )
-        new_per_day = compute_conservative_carryover_per_day(
-            effective_new, days_in_month=days_in_month,
-            remaining_days_incl_today=remaining_days, overspend_debt=new_debt,
-        )
-        cur_baseline = compute_spend_per_day(effective_cur, days_in_month)
-        cur_debt = compute_overspend_debt_for_month(
-            self.state.expenses, year=today.year, month=today.month,
-            through_date_exclusive=today, baseline_per_day=cur_baseline,
-        )
-        cur_per_day = compute_conservative_carryover_per_day(
-            effective_cur, days_in_month=days_in_month,
-            remaining_days_incl_today=remaining_days, overspend_debt=cur_debt,
-        )
+        new_per_day = compute_spend_per_day(effective_new, days_in_month)
+        cur_per_day = compute_spend_per_day(effective_cur, days_in_month)
         self.base_preview_var.set(
             f"Current daily: ${self._fmt(cur_per_day)}  →  New daily: ${self._fmt(new_per_day)}"
         )
@@ -483,19 +468,7 @@ class BudgetApp(ttk.Frame):
         today_spent = sum_expenses(expenses_for_date(self.state.expenses, today))
         month_spent = sum_expenses(expenses_for_month(self.state.expenses, today.year, today.month))
         baseline_per_day = compute_spend_per_day(effective_base, days_in_month)
-        overspend_debt = compute_overspend_debt_for_month(
-            self.state.expenses, year=today.year, month=today.month,
-            through_date_exclusive=today, baseline_per_day=baseline_per_day,
-        )
-        per_day = compute_conservative_carryover_per_day(
-            effective_base, days_in_month=days_in_month,
-            remaining_days_incl_today=remaining_days, overspend_debt=overspend_debt,
-        )
-        projected = compute_projected_allowance(
-            self.state.expenses, effective_base,
-            year=today.year, month=today.month, today=today,
-            days_in_month=days_in_month, remaining_days_incl_today=remaining_days,
-        )
+        per_day = baseline_per_day
         streak = compute_streak(
             self.state.expenses, today.year, today.month, today, baseline_per_day
         )
@@ -505,13 +478,31 @@ class BudgetApp(ttk.Frame):
 
         self.remaining_days_var.set(str(remaining_days))
         self.per_day_var.set(f"${self._fmt(per_day)}")
-        self.projected_var.set(f"${self._fmt(projected)}")
         self.streak_var.set(f"{streak}-day streak" if streak > 0 else "")
         self.spent_today_var.set(f"${self._fmt(today_spent)}")
         self.remaining_today_var.set(f"${self._fmt(today_remaining)}")
         self.spent_month_var.set(f"${self._fmt(month_spent)}")
         self.remaining_month_var.set(f"${self._fmt(month_remaining)}")
         self.saved_last_month_var.set(f"${self._fmt(self.state.last_month_saved)}")
+
+        # Show tomorrow's adjusted limit only when today's spending exceeds the daily limit
+        if today_spent > per_day:
+            projected = compute_projected_allowance(
+                self.state.expenses, effective_base,
+                year=today.year, month=today.month, today=today,
+                days_in_month=days_in_month, remaining_days_incl_today=remaining_days,
+            )
+            self.projected_var.set(f"${self._fmt(projected)}")
+            if self._projected_label:
+                self._projected_label.grid()
+            if self._projected_value_label:
+                self._projected_value_label.grid()
+        else:
+            self.projected_var.set("")
+            if self._projected_label:
+                self._projected_label.grid_remove()
+            if self._projected_value_label:
+                self._projected_value_label.grid_remove()
 
         # Recurring reserved row
         if recurring_total > 0:
@@ -528,11 +519,10 @@ class BudgetApp(ttk.Frame):
                 self.recurring_reserved_value_label.grid_remove()
 
         # Recovery callout
-        if per_day == 0:
+        if month_remaining < 0:
             self.recovery_var.set(
-                f"Daily limit exceeded — focus on keeping total spending under "
-                f"${self._fmt(base)} this month (${self._fmt(month_remaining)} remaining, "
-                f"{remaining_days} days left)."
+                f"Monthly budget exceeded by ${self._fmt(-month_remaining)} — "
+                f"{remaining_days} days left."
             )
         else:
             self.recovery_var.set("")
